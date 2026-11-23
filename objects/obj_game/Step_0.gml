@@ -77,7 +77,7 @@ if (state != "play" || paused) {
         else if(action=="CANCEL") change_scene("options",paused,3);
         else if(action=="CONFIRM RESET") {
             best=0;
-            ini_open("bullet_mania.ini"); ini_write_real("record","score",0); ini_close();
+            ini_open("bullet_mania.ini"); ini_write_real("record_20_stages","score",0); ini_close();
             options_message="Best score reset. A fresh record awaits.";
             change_scene("options",paused,3);
         }

@@ -19,7 +19,7 @@ clean_name = function(_text) {
     while(string_length(result)>0 && string_char_at(result,1)==" ") result=string_delete(result,1,1);
     return result;
 };
-ini_open("bullet_mania_leaderboard.ini");
+ini_open("bullet_mania_leaderboard_20_stages.ini");
 for(var k=0;k<10;k++) {
     var entry_name=clean_name(ini_read_string("entry"+string(k),"name",""));
     var entry_score=max(0,floor(ini_read_real("entry"+string(k),"score",0)));
@@ -27,7 +27,7 @@ for(var k=0;k<10;k++) {
 }
 ini_close();
 save_leaderboard = function() {
-    ini_open("bullet_mania_leaderboard.ini");
+    ini_open("bullet_mania_leaderboard_20_stages.ini");
     for(var k=0;k<10;k++) {
         var section="entry"+string(k);
         ini_section_delete(section);
@@ -165,7 +165,7 @@ score = 0;
 best = 0;
 if (file_exists("bullet_mania.ini")) {
     ini_open("bullet_mania.ini");
-    best = ini_read_real("record", "score", 0);
+    best = ini_read_real("record_20_stages", "score", 0);
     ini_close();
 }
 px = 683; py = 620;
@@ -199,7 +199,7 @@ shop_buy = function(_item) {
     }
     shop_message=(_item==4?"DASH REACTOR":pickup_names[_item])+" purchased / -"+string(shop_prices[_item])+" CR";
 };
-bullets = []; shots = []; enemies = []; sparks = [];
+bullets = []; bullet_count=0; shots = []; enemies = []; sparks = [];
 shake = 0; flash = 0;
 pickups=[]; weapon_level=1; shield=0; kills=0;
 pickup_notice=""; pickup_notice_time=0;
@@ -263,7 +263,14 @@ burst = function(_x, _y, _col, _n) {
     }
 };
 emit = function(_x, _y, _a, _s, _r, _col) {
-    array_push(bullets, {x:_x, y:_y, vx:lengthdir_x(_s,_a), vy:lengthdir_y(_s,_a), r:_r, col:_col});
+    // The active prefix holds live bullets. Slots beyond it are reused on emission.
+    if(bullet_count==array_length(bullets)) array_push(bullets,{});
+    var b=bullets[bullet_count++];
+    b.x=_x; b.y=_y;
+    b.vx=lengthdir_x(_s,_a); b.vy=lengthdir_y(_s,_a);
+    b.r=_r; b.col=_col;
+    b.hit_radius_squared=sqr(_r+4);
+    b.scale=_r/12;
 };
 ring = function(_x, _y, _count, _angle, _speed, _col) {
     for (var k = 0; k < _count; k++) emit(_x,_y,_angle+k*360/_count,_speed,5,_col);
@@ -282,7 +289,7 @@ boss_tick = function(e) {
     var next_phase = e.hp <= e.max_hp/3 ? 2 : (e.hp <= e.max_hp*2/3 ? 1 : 0);
     if(next_phase>e.phase) {
         e.phase=next_phase; e.transition=60; e.warning=0; e.cd=0;
-        bullets=[]; burst(e.x,e.y,boss_colors[e.kind-3],35);
+        bullet_count=0; burst(e.x,e.y,boss_colors[e.kind-3],35);
     }
     if(e.transition>0) { e.transition--; return; }
     var aim=point_direction(e.x,e.y,px,py);
@@ -392,7 +399,7 @@ finish = function(_win) {
     if (score > best) {
         best = score;
         ini_open("bullet_mania.ini");
-        ini_write_real("record", "score", best);
+        ini_write_real("record_20_stages", "score", best);
         ini_close();
     }
 };
@@ -412,7 +419,7 @@ start_run = function() {
     change_scene("play",false,0);
     score=0; px=683; py=620; hp=5; inv=0; dash=0; dash_cd=0;
     dx=0; dy=-1; bombs=3; fire_cd=0; wave=0; wave_time=0; wave_gap=120;
-    bullets=[]; shots=[]; enemies=[]; sparks=[]; shake=0; flash=0;
+    bullet_count=0; shots=[]; enemies=[]; sparks=[]; shake=0; flash=0;
     pickups=[]; weapon_level=1; shield=0; kills=0;
     pickup_notice=""; pickup_notice_time=0;
     trails=[]; ripples=[]; ship_bank=0;
@@ -475,7 +482,7 @@ menu_draw = function() {
         label(810,630,"Your name is requested every launch.",1,muted);
     } else if(state=="leaderboard") {
         label(100,120,"LEADERBOARD",3,cyan);
-        label(100,180,"LOCAL TOP 10 / BEST RUN PER PILOT",1,muted);
+        label(100,180,"20-STAGE CAMPAIGN / LOCAL TOP 10",1,muted);
         for(var k=0;k<10;k++) {
             var row=226+k*34;
             var own=k<array_length(leaderboard) && leaderboard[k].player==player_name;
@@ -592,10 +599,11 @@ if (mag > 0) { mx /= mag; my /= mag; dx = mx; dy = my; }
 ship_bank=lerp(ship_bank,-mx*15,0.18);
 if (consume_dash && dash_cd == 0) { dash = 11; dash_cd = 90-15*dash_level; burst(px,py,cyan,20); }
 var spd = input_held(4) ? 2.5 : 5.3;
-if (dash > 0) { dash--; px += dx*15; py += dy*15; burst(px,py,cyan,2); }
+var dashing_this_tick=dash>0;
+if (dashing_this_tick) { dash--; px += dx*15; py += dy*15; burst(px,py,cyan,2); }
 else { px += mx*spd; py += my*spd; }
 px = clamp(px,42,1324); py = clamp(py,120,722);
-if(dash>0 || sim_counter mod 3==0) array_push(trails,{x:px,y:py,age:0,boost:dash>0});
+if(dashing_this_tick || sim_counter mod 3==0) array_push(trails,{x:px,y:py,age:0,boost:dashing_this_tick});
 for(var k=array_length(trails)-1;k>=0;k--) { trails[k].age++; if(trails[k].age>15) array_delete(trails,k,1); }
 for(var k=array_length(ripples)-1;k>=0;k--) { ripples[k].age++; if(ripples[k].age>30) array_delete(ripples,k,1); }
 fire_cd--;
@@ -610,7 +618,7 @@ if (fire_cd <= 0) {
     }
 }
 if (consume_pulse && bombs > 0) {
-    bombs--; bullets = []; flash = 1; shake = 12;
+    bombs--; bullet_count=0; flash = 1; shake = 12;
     burst(px,py,cyan,80);
     array_push(ripples,{x:px,y:py,col:cyan,age:0,size:1100});
     for (var i = 0; i < array_length(enemies); i++) {
@@ -625,7 +633,7 @@ if (array_length(enemies) == 0) {
         if(shop_pending) {
             // Secure uncollected boss rewards before docking; pickups never expire in the shop.
             for(var k=0;k<array_length(pickups);k++) collect_pickup(pickups[k].kind);
-            pickups=[]; shots=[]; bullets=[]; shop_pending=false;
+            pickups=[]; shots=[]; bullet_count=0; shop_pending=false;
             shop_message="Spend credits to prepare for the next sector.";
             change_scene("shop",false,0); return;
         }
@@ -639,21 +647,20 @@ if (array_length(enemies) == 0) {
                 spawn((i+formation+sector)%3,160+i*(1046/max(1,count-1)),-40-i%2*65);
                 enemies[i].row=formation==2?180+abs(i-(count-1)/2)*38:180+(i mod 2)*85;
             }
-        } else { bullets=[]; shots=[]; spawn(stages[wave-1],683,-80); }
+        } else { bullet_count=0; shots=[]; spawn(stages[wave-1],683,-80); }
     }
 }
 wave_time++;
 for (var i = array_length(enemies)-1; i >= 0; i--) {
     var e = enemies[i]; e.age++; e.cd--;
     e.hit=max(0,e.hit-1); e.display_hp=lerp(e.display_hp,max(0,e.hp),0.16);
-    if (e.kind >= 3) {
+    // Resolve defeated enemies below before they can move, retreat, or fire.
+    if(e.hp>0 && e.kind>=3) {
         boss_tick(e);
-    } else {
-        if(e.age>1500) {
-            e.y-=8;
-            if(e.y < -60) { array_delete(enemies,i,1); continue; }
-            continue;
-        }
+    } else if(e.hp>0 && e.age>1500) {
+        e.y-=8;
+        if(e.y < -60) array_delete(enemies,i,1);
+    } else if(e.hp>0) {
         e.y=lerp(e.y,e.row,0.025);
         if(formation==0) e.x=e.home+sin(e.age*0.025+e.home)*65;
         if(formation==1) e.x=e.home+sin(e.age*0.018)*(i mod 2==0?115:-115);
@@ -673,7 +680,7 @@ for (var i = array_length(enemies)-1; i >= 0; i--) {
         credits+=e.kind>=3?250+(e.kind-3)*100:25+e.kind*10;
         burst(e.x,e.y,e.kind>=3?boss_colors[e.kind-3]:pink,e.kind>=3?100:28); shake = 6;
         if(e.kind>=3) {
-            bullets=[]; hp=min(5,hp+1); bombs=min(3,bombs+1); inv=120;
+            bullet_count=0; hp=min(5,hp+1); bombs=min(3,bombs+1); inv=120;
             if(wave<array_length(stages)) { drop_pickup(e.x-35,e.y,0); drop_pickup(e.x+35,e.y,1); shop_pending=true; }
         } else {
             kills++;
@@ -710,22 +717,38 @@ for(var i=array_length(pickups)-1;i>=0;i--) {
     if(point_distance(p.x,p.y,px,py)<26) { collect_pickup(p.kind); array_delete(pickups,i,1); }
     else if(p.y>760 || p.age>600) array_delete(pickups,i,1);
 }
-for (var i = array_length(bullets)-1; i >= 0; i--) {
-    var b=bullets[i]; b.x+=b.vx; b.y+=b.vy;
-    var dist_squared=sqr(px-b.x)+sqr(py-b.y);
-    if(inv==0 && dash==0 && dist_squared<sqr(b.r+4)) {
-        if(shield>0) {
-            shield--; inv=75; shake=7; flash=0.25; burst(px,py,violet,35);
-            pickup_notice="SHIELD ABSORBED HIT"; pickup_notice_time=90;
-        } else {
-            hp--; inv=110; shake=15; flash=0.5; burst(px,py,cyan,40);
+var can_hit=inv==0 && !dashing_this_tick;
+for (var i=bullet_count-1;i>=0;i--) {
+    var b=bullets[i];
+    var bx=b.x+b.vx, by=b.y+b.vy;
+    b.x=bx; b.y=by;
+    var remove=bx < -40 || bx>1406 || by < -50 || by>810;
+    var fatal=false;
+    if(can_hit && !remove) {
+        var offset_x=px-bx, offset_y=py-by;
+        if(abs(offset_x)<24 && abs(offset_y)<24) {
+            var distance_squared=sqr(offset_x)+sqr(offset_y);
+            if(distance_squared<b.hit_radius_squared) {
+                if(shield>0) {
+                    shield--; inv=75; shake=7; flash=0.25; burst(px,py,violet,35);
+                    pickup_notice="SHIELD ABSORBED HIT"; pickup_notice_time=90;
+                } else {
+                    hp--; inv=110; shake=15; flash=0.5; burst(px,py,cyan,40);
+                }
+                can_hit=false;
+                remove=true;
+                fatal=hp<=0;
+            } else if(distance_squared<576 && distance_squared>b.hit_radius_squared) {
+                score++;
+            }
         }
-        { bullets[i]=bullets[array_length(bullets)-1]; array_pop(bullets); }
-        if(hp<=0) { finish(false); break; }
-        continue;
     }
-    if(dist_squared<576 && dist_squared>sqr(b.r+4) && inv==0 && dash==0) score++;
-    if(b.x < -40 || b.x>1406 || b.y < -50 || b.y>810) { bullets[i]=bullets[array_length(bullets)-1]; array_pop(bullets); }
+    if(remove) {
+        bullet_count--;
+        bullets[i]=bullets[bullet_count];
+        bullets[bullet_count]=b;
+    }
+    if(fatal) { finish(false); break; }
 }
 for(var i=array_length(sparks)-1;i>=0;i--) {
     var p=sparks[i]; p.x+=p.vx; p.y+=p.vy; p.vx*=0.96; p.vy*=0.96; p.life--;

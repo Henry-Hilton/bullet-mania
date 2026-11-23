@@ -103,10 +103,16 @@ for(var i=0;i<array_length(enemies);i++) {
         draw_set_halign(fa_left);
     }
 }
-for(var i=0;i<array_length(bullets);i++) {
-    var b=bullets[i];
-    if(bullet_sprite!=-1) draw_sprite_ext(bullet_sprite,0,b.x+ox,b.y+oy,b.r/12,b.r/12,0,b.col,1);
-    else { draw_set_color(b.col); draw_circle(b.x+ox,b.y+oy,b.r,false); }
+if(bullet_sprite!=-1) {
+    for(var i=0;i<bullet_count;i++) {
+        var b=bullets[i];
+        draw_sprite_ext(bullet_sprite,0,b.x+ox,b.y+oy,b.scale,b.scale,0,b.col,1);
+    }
+} else {
+    for(var i=0;i<bullet_count;i++) {
+        var b=bullets[i];
+        draw_set_color(b.col); draw_circle(b.x+ox,b.y+oy,b.r,false);
+    }
 }
 for(var i=0;i<array_length(sparks);i++) {
     var p=sparks[i]; draw_set_alpha(min(1,p.life/20)); draw_set_color(p.col);
