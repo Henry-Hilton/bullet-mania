@@ -48,6 +48,12 @@ The Neon Supply shop opens after each of the first four bosses, following the us
 
 Full or unaffordable items are dimmed and reject purchases without charging credits. Gameplay freezes while shopping. Uncollected supplies are secured automatically on docking. Choose Next Sector to continue; the shop cannot be reopened during that sector. All upgrades last for the current run.
 
+## Endless mode
+
+Choose **Start Endless** on the main menu. Each sector shuffles three formation styles, varies enemy types and placement, and ends with a boss selected from the five campaign bosses. Consecutive sectors never use the same boss. A supply dock opens after every boss. Enemy counts, firing pressure, and boss health scale up through sector eight, then level off. The run ends when your hull reaches zero, and retry starts a freshly generated run.
+
+Endless saves its own personal best and top ten, including the stage reached. Use **View Endless** or **View Campaign** on the leaderboard to switch tables. Reset Best Score applies to the active mode when opened from pause, or to Campaign from the title menu.
+
 ## Stages
 
 | Sector | Formations in order | Boss |

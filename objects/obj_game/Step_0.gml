@@ -51,7 +51,7 @@ if (state != "play" || paused) {
     var confirm=keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space);
     if(mouse_check_button_pressed(mb_left) && hovered>=0) { menu_index=hovered; confirm=true; }
     if(state=="controls" && keyboard_check_pressed(vk_escape)) confirm=true;
-    if(state=="leaderboard" && keyboard_check_pressed(vk_escape)) confirm=true;
+    if(state=="leaderboard" && keyboard_check_pressed(vk_escape)) { menu_index=1; confirm=true; }
     if(state=="bindings" && keyboard_check_pressed(vk_escape)) { menu_index=14; confirm=true; }
     if(state=="options" && keyboard_check_pressed(vk_escape)) { menu_index=4; confirm=true; }
     var setting_direction=keyboard_check_pressed(vk_right)-keyboard_check_pressed(vk_left);
@@ -61,11 +61,13 @@ if (state != "play" || paused) {
         var action=items[menu_index];
         if(state=="shop" && menu_index<5) { shop_buy(menu_index); exit; }
         if(state=="bindings" && menu_index<13) { rebind_slot=menu_index; rebind_release=true; exit; }
-        if(action=="START RUN" || action=="PLAY AGAIN") start_run();
+        if(action=="START CAMPAIGN" || action=="START ENDLESS") { endless=action=="START ENDLESS"; start_run(); }
+        else if(action=="PLAY AGAIN") start_run();
         else if(action=="RESUME") change_scene("play",false,0);
         else if(action=="HOW TO PLAY") { menu_previous=state; change_scene("controls",paused,0); }
         else if(action=="OPTIONS") { options_previous=state; change_scene("options",paused,0); }
-        else if(action=="LEADERBOARD") { leaderboard_previous=state; change_scene("leaderboard",paused,0); }
+        else if(action=="LEADERBOARD") { leaderboard_previous=state; board_endless=endless; load_leaderboard(board_endless); change_scene("leaderboard",paused,0); }
+        else if(action=="VIEW CAMPAIGN" || action=="VIEW ENDLESS") { board_endless=!board_endless; load_leaderboard(board_endless); }
         else if(action=="KEY BINDINGS") change_scene("bindings",paused,0);
         else if(action=="FRAME RATE") {
             fps_index=(fps_index+array_length(fps_choices)+(setting_direction<0?-1:1)) mod array_length(fps_choices);
@@ -77,7 +79,7 @@ if (state != "play" || paused) {
         else if(action=="CANCEL") change_scene("options",paused,3);
         else if(action=="CONFIRM RESET") {
             best=0;
-            ini_open("bullet_mania.ini"); ini_write_real("record_20_stages","score",0); ini_close();
+            ini_open("bullet_mania.ini"); ini_write_real(record_section(),"score",0); ini_close();
             options_message="Best score reset. A fresh record awaits.";
             change_scene("options",paused,3);
         }
@@ -85,12 +87,12 @@ if (state != "play" || paused) {
             array_copy(bindings,0,binding_defaults,0,13); save_bindings(); binding_message="Default controls restored.";
         }
         else if(action=="BACK") {
-            if(state=="leaderboard") change_scene(leaderboard_previous,paused,leaderboard_previous=="title"?3:1);
+            if(state=="leaderboard") change_scene(leaderboard_previous,paused,leaderboard_previous=="title"?4:1);
             else if(state=="bindings") change_scene("options",paused,0);
-            else if(state=="options") change_scene(options_previous,paused,2);
-            else change_scene(menu_previous,paused,1);
+            else if(state=="options") change_scene(options_previous,paused,options_previous=="title"?3:2);
+            else change_scene(menu_previous,paused,menu_previous=="title"?2:1);
         }
-        else if(action=="MAIN MENU") change_scene("title",false,0);
+        else if(action=="MAIN MENU") { endless=false; read_best(); change_scene("title",false,0); }
         else if(action=="QUIT GAME") game_end();
     }
     exit;

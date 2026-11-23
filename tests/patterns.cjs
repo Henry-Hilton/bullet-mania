@@ -39,6 +39,18 @@ for(let sector=0;sector<5;sector++) {
 }
 const collisionLoop=source.slice(source.indexOf('var can_hit=inv'),source.indexOf('for(var i=array_length(sparks)-1;'));
 const updateBullets = new vm.Script(collisionLoop);
+const generator=world();
+generator.irandom=(n)=>Math.floor(Math.random()*(n+1));
+generator.irandom_range=(lo,hi)=>lo+generator.irandom(hi-lo);
+vm.runInContext(method('generate_sector'),generator);
+let previousBoss=-1;
+for(let i=0;i<1000;i++) {
+    const sector=generator.generate_sector(previousBoss);
+    assert.deepEqual(new Set(sector.slice(0,3)),new Set([0,-1,-2]));
+    assert(sector[3]>=3 && sector[3]<=7);
+    assert.notEqual(sector[3],previousBoss);
+    previousBoss=sector[3];
+}
 let overallPeak=0;
 for(let kind=3;kind<=7;kind++) {
     for(let phase=0;phase<3;phase++) {

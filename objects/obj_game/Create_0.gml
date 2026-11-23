@@ -8,6 +8,7 @@ bg = make_color_rgb(6, 8, 22);
 state = "username";
 player_name=""; name_entry=""; name_message="Enter a name to join the arcade.";
 keyboard_string="";
+endless=false; board_endless=false;
 leaderboard=[]; leaderboard_previous="title"; run_submitted=false;
 clean_name = function(_text) {
     var result="";
@@ -19,21 +20,30 @@ clean_name = function(_text) {
     while(string_length(result)>0 && string_char_at(result,1)==" ") result=string_delete(result,1,1);
     return result;
 };
-ini_open("bullet_mania_leaderboard_20_stages.ini");
-for(var k=0;k<10;k++) {
-    var entry_name=clean_name(ini_read_string("entry"+string(k),"name",""));
-    var entry_score=max(0,floor(ini_read_real("entry"+string(k),"score",0)));
-    if(entry_name!="") array_push(leaderboard,{player:entry_name,points:entry_score,cleared:ini_read_real("entry"+string(k),"cleared",0)==1});
-}
-ini_close();
+leaderboard_file = function(_endless) {
+    return _endless?"bullet_mania_leaderboard_endless.ini":"bullet_mania_leaderboard_20_stages.ini";
+};
+load_leaderboard = function(_endless) {
+    leaderboard=[];
+    ini_open(leaderboard_file(_endless));
+    for(var k=0;k<10;k++) {
+        var section="entry"+string(k);
+        var entry_name=clean_name(ini_read_string(section,"name",""));
+        var entry_score=max(0,floor(ini_read_real(section,"score",0)));
+        if(entry_name!="") array_push(leaderboard,{player:entry_name,points:entry_score,
+            cleared:ini_read_real(section,"cleared",0)==1,stage:ini_read_real(section,"stage",0)});
+    }
+    ini_close();
+};
 save_leaderboard = function() {
-    ini_open("bullet_mania_leaderboard_20_stages.ini");
+    ini_open(leaderboard_file(endless));
     for(var k=0;k<10;k++) {
         var section="entry"+string(k);
         ini_section_delete(section);
         if(k<array_length(leaderboard)) {
             ini_write_string(section,"name",leaderboard[k].player);
             ini_write_real(section,"score",leaderboard[k].points);
+            ini_write_real(section,"stage",leaderboard[k].stage);
             ini_write_real(section,"cleared",leaderboard[k].cleared?1:0);
         }
     }
@@ -42,11 +52,12 @@ save_leaderboard = function() {
 submit_score = function(_win) {
     if(run_submitted || player_name=="") return;
     run_submitted=true;
+    load_leaderboard(endless);
     var found=-1;
     for(var k=0;k<array_length(leaderboard);k++) if(leaderboard[k].player==player_name) found=k;
-    var entry={player:player_name,points:score,cleared:_win};
+    var entry={player:player_name,points:score,cleared:_win,stage:wave};
     if(found<0) array_push(leaderboard,entry);
-    else if(score>leaderboard[found].points || (score==leaderboard[found].points && _win)) leaderboard[found]=entry;
+    else if(score>leaderboard[found].points || (score==leaderboard[found].points && (_win || (endless && wave>leaderboard[found].stage)))) leaderboard[found]=entry;
     // Stable descending order keeps earlier entries ahead on tied scores.
     for(var k=1;k<array_length(leaderboard);k++) {
         var j=k;
@@ -131,8 +142,28 @@ input_held = function(_action) {
     return keyboard_check(bindings[_action]) || (_action<4 && keyboard_check(bindings[_action+8]));
 };
 input_pressed = function(_action) { return keyboard_check_pressed(bindings[_action]); };
-menu_top = function() { return state=="bindings"?222:((state=="controls" || state=="leaderboard" || state=="username")?610:(state=="shop"?306:(state=="options"?346:386))); };
-menu_spacing = function() { return state=="bindings"?30:((state=="options" || state=="shop")?58:64); };
+menu_top = function() {
+    switch(state) {
+        case "bindings": return 222;
+        case "leaderboard": return 567;
+        case "controls":
+        case "username": return 610;
+        case "shop": return 306;
+        case "options": return 346;
+        case "title": return 376;
+    }
+    return 386;
+};
+menu_spacing = function() {
+    switch(state) {
+        case "bindings": return 30;
+        case "leaderboard": return 56;
+        case "options":
+        case "shop": return 58;
+        case "title": return 53;
+    }
+    return 64;
+};
 t = 0;
 scene_age=0; scene_fade=1; scene_surface=-1;
 menu_glow=array_create(15,0);
@@ -162,12 +193,13 @@ button_offset = function(_row) {
     return -24*power(1-progress,3);
 };
 score = 0;
-best = 0;
-if (file_exists("bullet_mania.ini")) {
+record_section = function() { return endless?"record_endless":"record_20_stages"; };
+read_best = function() {
     ini_open("bullet_mania.ini");
-    best = ini_read_real("record_20_stages", "score", 0);
+    best=ini_read_real(record_section(),"score",0);
     ini_close();
-}
+};
+read_best();
 px = 683; py = 620;
 hp = 5; inv = 0; dash = 0; dash_cd = 0;
 dx = 0; dy = -1;
@@ -233,6 +265,21 @@ collect_pickup = function(_type) {
 };
 // Three distinct formations then a boss per sector. Negative kinds are formations.
 stages = [0,-1,-2,3, -1,-2,0,4, -2,0,-1,5, 0,-2,-1,6, -1,0,-2,7];
+endless_sector=[];
+generate_sector = function(_previous_boss) {
+    var order=[0,-1,-2];
+    for(var k=2;k>0;k--) {
+        var pick=irandom(k);
+        var swap=order[k]; order[k]=order[pick]; order[pick]=swap;
+    }
+    var boss=_previous_boss<3?3+irandom(4):3+((_previous_boss-3+irandom_range(1,4)) mod 5);
+    array_push(order,boss);
+    return order;
+};
+next_stage_kind = function() {
+    return endless?endless_sector[wave mod 4]:stages[wave];
+};
+difficulty=0;
 sector_names=["NEON FRONTIER","ION PASSAGE","PRISM BELT","ECHO FOUNDRY","NOVA CORE"];
 formation_names=["ARC GUARD","CROSSWIND","DIAMOND RELAY"];
 formation=0;
@@ -277,6 +324,7 @@ ring = function(_x, _y, _count, _angle, _speed, _col) {
 };
 spawn = function(_kind, _x, _y) {
     var enemy_health = (_kind >= 3) ? boss_health[_kind-3] : ((_kind == 2) ? 85 : 35);
+    if(endless && _kind>=3) enemy_health=round(enemy_health*(1+0.08*difficulty));
     array_push(enemies, {x:_x, y:_y, home:_x, kind:_kind, hp:enemy_health, max_hp:enemy_health,
         row:180+(_x div 200 mod 3)*60, age:0, cd:60, r:(_kind>=3)?48:20, phase:0, transition:0, warning:0, gap:683, volley:0,
         lock:270, hit:0, display_hp:enemy_health});
@@ -399,7 +447,7 @@ finish = function(_win) {
     if (score > best) {
         best = score;
         ini_open("bullet_mania.ini");
-        ini_write_real("record_20_stages", "score", best);
+        ini_write_real(record_section(), "score", best);
         ini_close();
     }
 };
@@ -417,6 +465,9 @@ label = function(_x, _y, _text, _scale, _col) {
 start_run = function() {
     run_submitted=false;
     change_scene("play",false,0);
+    read_best();
+    if(endless) endless_sector=generate_sector(-1);
+    difficulty=0;
     score=0; px=683; py=620; hp=5; inv=0; dash=0; dash_cd=0;
     dx=0; dy=-1; bombs=3; fire_cd=0; wave=0; wave_time=0; wave_gap=120;
     bullet_count=0; shots=[]; enemies=[]; sparks=[]; shake=0; flash=0;
@@ -427,7 +478,7 @@ start_run = function() {
 };
 menu_buttons = function() {
     if(state=="username") return ["ENTER ARCADE"];
-    if(state=="leaderboard") return ["BACK"];
+    if(state=="leaderboard") return [board_endless?"VIEW CAMPAIGN":"VIEW ENDLESS", "BACK"];
     if(state=="shop") return ["WEAPON UPGRADE", "SHIELD CHARGE", "HULL REPAIR", "PULSE REFILL", "DASH REACTOR", "NEXT SECTOR"];
     if(state=="options") return ["KEY BINDINGS", "FRAME RATE", "V SYNC", "RESET BEST SCORE", "BACK"];
     if(state=="reset_score") return ["CANCEL", "CONFIRM RESET"];
@@ -438,7 +489,7 @@ menu_buttons = function() {
         return rows;
     }
     if(state=="controls") return ["BACK"];
-    if(state=="title") return ["START RUN", "HOW TO PLAY", "OPTIONS", "LEADERBOARD", "QUIT GAME"];
+    if(state=="title") return ["START CAMPAIGN", "START ENDLESS", "HOW TO PLAY", "OPTIONS", "LEADERBOARD", "QUIT GAME"];
     if(paused) return ["RESUME", "HOW TO PLAY", "OPTIONS", "MAIN MENU"];
     return ["PLAY AGAIN", "LEADERBOARD", "MAIN MENU"];
 };
@@ -482,7 +533,7 @@ menu_draw = function() {
         label(810,630,"Your name is requested every launch.",1,muted);
     } else if(state=="leaderboard") {
         label(100,120,"LEADERBOARD",3,cyan);
-        label(100,180,"20-STAGE CAMPAIGN / LOCAL TOP 10",1,muted);
+        label(100,180,board_endless?"ENDLESS / LOCAL TOP 10":"20-STAGE CAMPAIGN / LOCAL TOP 10",1,muted);
         for(var k=0;k<10;k++) {
             var row=226+k*34;
             var own=k<array_length(leaderboard) && leaderboard[k].player==player_name;
@@ -491,7 +542,7 @@ menu_draw = function() {
             label(175,row+7,k<array_length(leaderboard)?leaderboard[k].player:"---",1,own?cyan:c_white);
             draw_set_halign(fa_right);
             label(580,row+7,k<array_length(leaderboard)?string(leaderboard[k].points):"---",1,gold);
-            label(720,row+7,k<array_length(leaderboard)?(leaderboard[k].cleared?"CLEARED":"DEFEATED"):"",0.8,muted);
+            label(720,row+7,k<array_length(leaderboard)?(board_endless?"STAGE "+string(leaderboard[k].stage):(leaderboard[k].cleared?"CLEARED":"DEFEATED")):"",0.8,muted);
             draw_set_halign(fa_left);
         }
         label(810,610,"PILOT / "+player_name,1.2,cyan);
@@ -551,7 +602,7 @@ menu_draw = function() {
             label(810,550,"FIVE SECTORS / TWENTY STAGES",1,cyan);
             for(var k=0;k<5;k++) label(810,580+k*20,string(k+1)+" / "+boss_names[k],0.9,boss_colors[k]);
         }
-        if(state=="dead" || state=="win") label(100,345,"PILOT / "+player_name+"  /  SCORE SAVED",1,gold);
+        if(state=="dead" || state=="win") label(100,345,endless?"ENDLESS / STAGE "+string(wave)+" / SCORE SAVED":"PILOT / "+player_name+"  /  SCORE SAVED",1,gold);
     }
     var items=menu_buttons();
     var top=menu_top(), spacing=menu_spacing();
@@ -637,17 +688,26 @@ if (array_length(enemies) == 0) {
             shop_message="Spend credits to prepare for the next sector.";
             change_scene("shop",false,0); return;
         }
-        wave++; wave_time = 0; wave_gap = 120;
-        if(wave>array_length(stages)) { score += hp*1000; finish(true); return; }
-        else if (stages[wave-1] <= 0) {
-            formation=-stages[wave-1];
-            var sector=(wave-1) div 4;
-            var count=5+sector;
+        if(!endless && wave>=array_length(stages)) { wave++; score += hp*1000; finish(true); return; }
+        var kind=next_stage_kind();
+        wave++; wave_time=0; wave_gap=120;
+        difficulty=min((wave-1) div 4,endless?7:4);
+        if(kind<=0) {
+            formation=-kind;
+            var count=5+difficulty;
+            if(endless) count=clamp(count+irandom_range(-1,1),5,12);
             for(var i=0;i<count;i++) {
-                spawn((i+formation+sector)%3,160+i*(1046/max(1,count-1)),-40-i%2*65);
+                var enemy_kind=endless?irandom(2):(i+formation+difficulty) mod 3;
+                var spawn_x=160+i*(1046/max(1,count-1));
+                if(endless) spawn_x+=irandom_range(-24,24);
+                spawn(enemy_kind,spawn_x,-40-(i mod 2)*65);
                 enemies[i].row=formation==2?180+abs(i-(count-1)/2)*38:180+(i mod 2)*85;
+                if(endless) enemies[i].cd=70+irandom(30);
             }
-        } else { bullet_count=0; shots=[]; spawn(stages[wave-1],683,-80); }
+        } else {
+            bullet_count=0; shots=[]; spawn(kind,683,-80);
+            if(endless) endless_sector=generate_sector(kind);
+        }
     }
 }
 wave_time++;
@@ -667,12 +727,12 @@ for (var i = array_length(enemies)-1; i >= 0; i--) {
         if(formation==2) { e.x=e.home+sin(e.age*0.02)*45; e.y+=sin(e.age*0.025+i)*1.2; }
         if (e.cd <= 0 && e.age > 70) {
             var aim = point_direction(e.x,e.y,px,py);
-            if(e.kind==0) { for(var k=-1;k<=1;k++) emit(e.x,e.y,aim+k*16,3.5+((wave-1) div 4)*0.2,5,pink); }
-            if(e.kind==1) ring(e.x,e.y,10,e.age*1.5,2.3+((wave-1) div 4)*0.15,violet);
+            if(e.kind==0) { for(var k=-1;k<=1;k++) emit(e.x,e.y,aim+k*16,3.5+difficulty*0.2,5,pink); }
+            if(e.kind==1) ring(e.x,e.y,10,e.age*1.5,2.3+difficulty*0.15,violet);
             if(e.kind==2) { for(var k=-2;k<=2;k++) emit(e.x,e.y,270+k*22+sin(e.age*0.03)*30,3,6,gold); }
             if(formation==1 && e.kind==0) emit(e.x,e.y,270,2.8,6,cyan);
             if(formation==2 && e.kind==2) ring(e.x,e.y,8,e.age,2.4,pink);
-            e.cd=max(55,100-((wave-1) div 4)*9)+(i mod 3)*7;
+            e.cd=max(55,100-difficulty*9)+(i mod 3)*7;
         }
     }
     if (e.hp <= 0) {
@@ -681,7 +741,7 @@ for (var i = array_length(enemies)-1; i >= 0; i--) {
         burst(e.x,e.y,e.kind>=3?boss_colors[e.kind-3]:pink,e.kind>=3?100:28); shake = 6;
         if(e.kind>=3) {
             bullet_count=0; hp=min(5,hp+1); bombs=min(3,bombs+1); inv=120;
-            if(wave<array_length(stages)) { drop_pickup(e.x-35,e.y,0); drop_pickup(e.x+35,e.y,1); shop_pending=true; }
+            if(endless || wave<array_length(stages)) { drop_pickup(e.x-35,e.y,0); drop_pickup(e.x+35,e.y,1); shop_pending=true; }
         } else {
             kills++;
             // Every third kill guarantees a drop, plus occasional bonus supplies.

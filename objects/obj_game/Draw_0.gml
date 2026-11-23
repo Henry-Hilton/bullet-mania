@@ -1,7 +1,7 @@
 if(bullet_sprite==-1) make_bullet_sprite();
 if(state=="title" || state=="controls" || state=="bindings" || state=="options" || state=="reset_score" || state=="shop" || state=="username" || state=="leaderboard") { menu_draw(); transition_draw(); exit; }
 draw_clear(bg);
-var sector_index=clamp((wave-1) div 4,0,4);
+var sector_index=max(0,(wave-1) div 4) mod 5;
 draw_set_alpha(0.14); draw_set_color(boss_colors[sector_index]);
 for(var gx=0;gx<=1366;gx+=48) draw_line(gx,92,gx,768);
 for(var gy=92;gy<768;gy+=48) { var yy=gy+(t*0.5)%48; draw_line(0,yy,1366,yy); }
@@ -169,6 +169,7 @@ label(1030,22,"PULSE  "+string(bombs),1.2,gold);
 label(1180,22,dash_cd==0?"DASH READY":"DASH "+string(ceil(dash_cd/60))+"s",1,cyan);
 draw_set_color(make_color_rgb(25,30,50)); draw_rectangle(1180,44,1322,48,false);
 draw_set_color(cyan); draw_rectangle(1180,44,1180+142*(1-dash_cd/(90-15*dash_level)),48,false);
+if(endless) label(1180,60,"STAGE "+string(max(1,wave)),1,cyan);
 label(28,56,"WEAPON "+string(weapon_level)+"/3  |  SHIELD "+string(shield)+"/2",1,violet);
 label(1030,60,"CREDITS / "+string(credits),1,gold);
 label(340,56,key_label(bindings[4])+" focus   "+key_label(bindings[5])+" dash   "+key_label(bindings[6])+" pulse   "+key_label(bindings[7])+" pause",0.95,make_color_rgb(130,145,180));
@@ -177,12 +178,12 @@ if(pickup_notice_time>0) {
     label(683,710-max(0,pickup_notice_time-100)*0.4,pickup_notice,1.25,cyan);
     draw_set_alpha(1); draw_set_halign(fa_left);
 }
-if(state=="play" && array_length(enemies)==0 && wave<array_length(stages)) {
+if(state=="play" && array_length(enemies)==0 && (endless || wave<array_length(stages))) {
     draw_set_halign(fa_center);
-    var next_kind=stages[wave];
+    var next_kind=next_stage_kind();
     var banner_alpha=min(1,(120-wave_gap)/18,wave_gap/18);
     draw_set_alpha(banner_alpha);
-    label(683,310+(1-banner_alpha)*20,next_kind>=3?boss_names[next_kind-3]+" APPROACHING":sector_names[wave div 4]+" / "+formation_names[-next_kind],2,cyan);
+    label(683,310+(1-banner_alpha)*20,next_kind>=3?boss_names[next_kind-3]+" APPROACHING":(endless?"SECTOR "+string(1+wave div 4):sector_names[wave div 4])+" / "+formation_names[-next_kind],2,cyan);
     if(wave>0 && wave mod 4==0) label(683,355,"HULL +1 / PULSE +1",1,gold);
     draw_set_halign(fa_left);
     draw_set_alpha(1);
