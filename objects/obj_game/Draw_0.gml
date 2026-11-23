@@ -1,6 +1,8 @@
+if(bullet_sprite==-1) make_bullet_sprite();
 if(state=="title" || state=="controls" || state=="bindings" || state=="options" || state=="reset_score" || state=="shop" || state=="username" || state=="leaderboard") { menu_draw(); transition_draw(); exit; }
 draw_clear(bg);
-draw_set_alpha(0.14); draw_set_color(violet);
+var sector_index=clamp((wave-1) div 4,0,4);
+draw_set_alpha(0.14); draw_set_color(boss_colors[sector_index]);
 for(var gx=0;gx<=1366;gx+=48) draw_line(gx,92,gx,768);
 for(var gy=92;gy<768;gy+=48) { var yy=gy+(t*0.5)%48; draw_line(0,yy,1366,yy); }
 draw_set_alpha(1);
@@ -42,6 +44,21 @@ for(var i=0;i<array_length(enemies);i++) {
         if(e.kind==3) {
             glow(ex-64,ey,7,pink); glow(ex+64,ey,7,violet);
         }
+        if(e.kind==6) {
+            for(var side=-1;side<=1;side+=2) {
+                draw_set_color(pink);
+                draw_rectangle(ex+side*78-8,ey-30,ex+side*78+8,ey+30,true);
+                glow(ex+side*78,ey,6,violet);
+            }
+        }
+        if(e.kind==7) {
+            for(var crown=0;crown<8;crown++) {
+                var crown_angle=crown*45-t*0.65;
+                var cx=ex+lengthdir_x(82,crown_angle), cy=ey+lengthdir_y(82,crown_angle);
+                draw_set_color(gold); draw_line(ex,ey,cx,cy);
+                glow(cx,cy,4,crown mod 2==0?pink:gold);
+            }
+        }
         if(e.kind==4) {
             draw_set_color(gold);
             draw_line_width(ex-80,ey-20,ex+80,ey-20,3);
@@ -57,6 +74,22 @@ for(var i=0;i<array_length(enemies);i++) {
                 label(e.gap,690,"SAFE LANE",1,cyan); draw_set_halign(fa_left);
             }
         }
+        if(e.kind==6 && e.warning>0) {
+            draw_set_color(pink); draw_set_alpha(0.14);
+            draw_rectangle(25,145,1341,e.gap-80,false);
+            draw_rectangle(25,e.gap+80,1341,743,false);
+            draw_set_alpha(0.8); draw_set_color(cyan);
+            draw_line(25,e.gap-80,1341,e.gap-80); draw_line(25,e.gap+80,1341,e.gap+80);
+            draw_set_alpha(1); label(50,e.gap-10,"SHUTTER GAP",1,cyan);
+        }
+        if(e.kind==7 && e.warning>0) {
+            draw_set_color(gold); draw_set_alpha(0.35+0.3*sin(t*0.3));
+            for(var k=-1;k<=1;k++) {
+                var angle=e.lock+k*(3+e.phase)*12;
+                draw_line(ex,ey,ex+lengthdir_x(1500,angle),ey+lengthdir_y(1500,angle));
+            }
+            draw_set_alpha(1); label(ex-70,ey+80,"TARGET LOCK",1,gold);
+        }
         draw_set_color(make_color_rgb(25,30,50)); draw_rectangle(380,108,986,120,false);
         draw_set_color(merge_color(col,c_white,0.65)); draw_rectangle(380,108,380+606*clamp(e.display_hp/e.max_hp,0,1),120,false);
         draw_set_color(col); draw_rectangle(380,108,380+606*clamp(e.hp/e.max_hp,0,1),120,false);
@@ -71,8 +104,9 @@ for(var i=0;i<array_length(enemies);i++) {
     }
 }
 for(var i=0;i<array_length(bullets);i++) {
-    var b=bullets[i]; glow(b.x+ox,b.y+oy,b.r,b.col);
-    draw_set_color(c_white); draw_circle(b.x+ox,b.y+oy,1.5,false);
+    var b=bullets[i];
+    if(bullet_sprite!=-1) draw_sprite_ext(bullet_sprite,0,b.x+ox,b.y+oy,b.r/12,b.r/12,0,b.col,1);
+    else { draw_set_color(b.col); draw_circle(b.x+ox,b.y+oy,b.r,false); }
 }
 for(var i=0;i<array_length(sparks);i++) {
     var p=sparks[i]; draw_set_alpha(min(1,p.life/20)); draw_set_color(p.col);
@@ -142,8 +176,8 @@ if(state=="play" && array_length(enemies)==0 && wave<array_length(stages)) {
     var next_kind=stages[wave];
     var banner_alpha=min(1,(120-wave_gap)/18,wave_gap/18);
     draw_set_alpha(banner_alpha);
-    label(683,310+(1-banner_alpha)*20,next_kind>=3?boss_names[next_kind-3]+" APPROACHING":"SECTOR "+string(1+wave div 3)+" / FORMATION "+string(1+wave mod 3),2,cyan);
-    if(wave>0 && wave mod 3==0) label(683,355,"HULL +1 / PULSE +1",1,gold);
+    label(683,310+(1-banner_alpha)*20,next_kind>=3?boss_names[next_kind-3]+" APPROACHING":sector_names[wave div 4]+" / "+formation_names[-next_kind],2,cyan);
+    if(wave>0 && wave mod 4==0) label(683,355,"HULL +1 / PULSE +1",1,gold);
     draw_set_halign(fa_left);
     draw_set_alpha(1);
 }

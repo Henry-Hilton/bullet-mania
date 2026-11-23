@@ -32,11 +32,11 @@ Menu navigation stays on arrows/W/S and Enter/Space, with mouse support. Escape 
 | Escape | Pause / resume |
 | R | Restart after defeat or victory |
 
-Shooting is automatic. The white dot at the ship's center is its collision core. Survive three sectors, each with two formations followed by a boss. Close passes earn graze points. Remaining hull adds a victory bonus. Best score is saved locally using GameMaker's sandbox.
+Shooting is automatic. The white dot at the ship's center is its collision core. Survive five sectors (20 stages), each with three formations followed by a boss. Close passes earn graze points. Remaining hull adds a victory bonus. Best score is saved locally using GameMaker's sandbox.
 
 ## Sector shop
 
-The Neon Supply shop opens after Helix Warden and Ion Tempest, following the usual two-second recovery interval. Regular enemy kills grant 25/35/45 credits by enemy type; bosses grant 250/350/450. Credits are separate from score, shown in the HUD, and reset on a new run.
+The Neon Supply shop opens after each of the first four bosses, following the usual two-second recovery interval. Regular enemy kills grant 25/35/45 credits by enemy type; the five bosses grant 250/350/450/550/650. Credits are separate from score, shown in the HUD, and reset on a new run.
 
 | Purchase | Credits | Effect |
 | --- | --- | --- |
@@ -48,19 +48,33 @@ The Neon Supply shop opens after Helix Warden and Ion Tempest, following the usu
 
 Full or unaffordable items are dimmed and reject purchases without charging credits. Gameplay freezes while shopping. Uncollected supplies are secured automatically on docking. Choose Next Sector to continue; the shop cannot be reopened during that sector. All upgrades last for the current run.
 
+## Stages
+
+| Sector | Formations in order | Boss |
+| --- | --- | --- |
+| Neon Frontier | Arc Guard, Crosswind, Diamond Relay | Helix Warden |
+| Ion Passage | Crosswind, Diamond Relay, Arc Guard | Ion Tempest |
+| Prism Belt | Diamond Relay, Arc Guard, Crosswind | Prism Engine |
+| Echo Foundry | Arc Guard, Diamond Relay, Crosswind | Echo Sentinel |
+| Nova Core | Crosswind, Arc Guard, Diamond Relay | Nova Crown |
+
+Arc Guard uses staggered stationary rows with individual horizontal drift. Crosswind sends alternating rows sweeping in opposing directions, adding straight lanes to aimed shooters. Diamond Relay arranges ships around a central point with bobbing movement and ring accents on fan shooters. Each sector adds one ship (5 through 9) and modestly increases firing pressure; formations retreat after 25 seconds if not destroyed. Grid colors follow the sector's boss palette.
+
 ## Boss encounters
 
 | Boss | Visual | Phase 1 | Phase 2 | Phase 3 |
 | --- | --- | --- | --- | --- |
-| Helix Warden | Violet diamond with twin cores | Opposing three-arm spirals | Layered radial petals | Faster spirals with aimed bursts |
-| Ion Tempest | Gold pentagon with wide rails | Bullet rain with a warned escape corridor | Rain plus aimed fans | Double curtains plus aimed fans |
-| Prism Engine | Cyan hexagonal reactor | Rotating rings | Aimed fans mixed with slow rings | Four spiral arms with periodic rings |
+| Helix Warden | Violet diamond with twin cores | Opposing three-arm spirals | Layered radial petals | Faster spirals with aimed bursts; all phases alternate with pinwheels |
+| Ion Tempest | Gold pentagon with wide rails | Bullet rain with a warned escape corridor | Rain plus aimed fans and alternating diagonal sweeps | Double curtains plus fans and sweeps |
+| Prism Engine | Cyan hexagonal reactor | Rotating rings | Aimed fans mixed with slow rings | Four spiral arms with periodic rings; all phases alternate with edge blooms |
+| Echo Sentinel | Pink heptagon with shutter pods | Side walls with a warned horizontal gap | Shutters plus slow rings | Faster shutters and rings |
+| Nova Crown | Gold octagon with orbiting crown | Warned, locked fan plus slow ring | Wider fan and denser ring | Largest fan with shorter recovery |
 
-Boss phases change at two-thirds and one-third health. Entry grants two seconds to reposition; phase transitions clear bullets and grant a one-second attack break. Bosses cannot take damage during entry or phase breaks. Ion Tempest marks its safe corridor with cyan lines before launching rain; its other projectiles can still cross that corridor. Boss defeats clear projectiles, restore one hull point and one pulse (up to their starting limits), and grant two seconds of player invulnerability. Defeat all three bosses to win.
+Boss phases change at two-thirds and one-third health. Entry grants two seconds to reposition; phase transitions clear bullets and grant a one-second attack break. Bosses cannot take damage during entry or phase breaks. Ion Tempest marks its safe corridor with cyan lines before launching rain; its other projectiles can still cross that corridor. Boss defeats clear projectiles, restore one hull point and one pulse (up to their starting limits), and grant two seconds of player invulnerability. Echo Sentinel marks its horizontal gap before firing both side walls. Nova Crown shows its locked fan direction before release; neither warning follows subsequent player movement. Supplementary rings can cross shutter gaps. Defeat all five bosses to win.
 
 ## Power-ups
 
-Supplies are labeled neon diamonds, distinct from round hostile bullets. Fly within 125 pixels to attract them; they drift down, expire after ten seconds, and blink during their final two seconds. Every third defeated regular enemy drops a supply; other kills have a 15% bonus-drop chance. The third and sixth regular kills guarantee weapon cores. The first two bosses also drop a weapon and shield core.
+Supplies are labeled neon diamonds, distinct from round hostile bullets. Fly within 125 pixels to attract them; they drift down, expire after ten seconds, and blink during their final two seconds. Every third defeated regular enemy drops a supply; other kills have a 15% bonus-drop chance. The third and sixth regular kills guarantee weapon cores. The first four bosses also drop a weapon and shield core.
 
 | Core | Effect | Limit |
 | --- | --- | --- |
@@ -79,4 +93,12 @@ In-game animation includes ship banking, fading movement/dash echoes, shot strea
 
 Implementation lives in `objects/obj_game`: Create initializes the game and helper methods, Step handles gameplay, and Draw renders the scene and menus. Room1 contains one controller instance.
 
-Validation: successfully compiled with GameMaker runtime 2026.0.0.23 (Windows VM). Gameplay balance and full-run playtesting remain unverified. This version has no audio.
+## Performance and checks
+
+Hostile projectiles share a runtime sprite drawn from code primitives once: one sprite submission replaces four circle draws per bullet. No imported or AI-generated art is used. If surface creation fails, solid projectile circles remain visible. Generated sprites and transition surfaces are released on controller cleanup.
+
+Hostile bullets, player shots, and sparks use constant-time swap removal rather than shifting arrays. Bullet/core collision and graze checks use squared distances. Only cosmetic sparks are capped (320); gameplay projectiles are never dropped to enforce a budget. Sideways player shots are also culled outside the arena.
+
+Run `node tests/patterns.cjs` from the project root to check the 20-stage schedule, every boss phase for 60 simulated seconds, locked warnings, safe passage geometry at release, phase clearing, finite bullet positions, and swap-removal survivors. This harness executes the production attack functions with GameMaker math built-ins supplied in JavaScript; it does not measure rendering performance.
+
+Validation: compiled with GameMaker runtime 2026.0.0.23 (Windows VM). A disposable native runtime fixture passed all 20 stage transitions, four shops, victory, generated-sprite creation, and a 4,000-bullet/60-tick simulation stress check without dropping projectiles. Real playtest frame rates and difficulty balance still need checking on target hardware. This version has no audio. The existing GDD and exported roster predate this expansion.

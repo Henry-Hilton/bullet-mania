@@ -231,15 +231,33 @@ collect_pickup = function(_type) {
     pickup_notice=message; pickup_notice_time=120;
     burst(px,py,pickup_colors[_type],20);
 };
-// Stage order: two formations, a boss, repeated for three sectors.
-stages = [0,0,3,0,0,4,0,0,5];
-boss_names = ["HELIX WARDEN", "ION TEMPEST", "PRISM ENGINE"];
-boss_colors = [violet,gold,cyan];
-boss_health = [1000,1300,1600];
+// Three distinct formations then a boss per sector. Negative kinds are formations.
+stages = [0,-1,-2,3, -1,-2,0,4, -2,0,-1,5, 0,-2,-1,6, -1,0,-2,7];
+sector_names=["NEON FRONTIER","ION PASSAGE","PRISM BELT","ECHO FOUNDRY","NOVA CORE"];
+formation_names=["ARC GUARD","CROSSWIND","DIAMOND RELAY"];
+formation=0;
+boss_names = ["HELIX WARDEN", "ION TEMPEST", "PRISM ENGINE", "ECHO SENTINEL", "NOVA CROWN"];
+boss_colors = [violet,gold,cyan,pink,gold];
+boss_health = [1000,1300,1600,1800,2100];
+// Generated once from primitives, then batched by the native sprite renderer.
+bullet_sprite=-1;
+make_bullet_sprite = function() {
+    var canvas=surface_create(64,64);
+    if(!surface_exists(canvas)) return;
+    surface_set_target(canvas); draw_clear_alpha(c_black,0);
+    draw_set_color(c_white);
+    draw_set_alpha(0.06); draw_circle(32,32,31,false);
+    draw_set_alpha(0.14); draw_circle(32,32,20,false);
+    draw_set_alpha(1); draw_circle(32,32,12,false);
+    surface_reset_target();
+    bullet_sprite=sprite_create_from_surface(canvas,0,0,64,64,false,false,32,32);
+    surface_free(canvas);
+};
 
 burst = function(_x, _y, _col, _n) {
     if(_n>=15) array_push(ripples,{x:_x,y:_y,col:_col,age:0,size:min(180,_n*2)});
-    for (var k = 0; k < _n; k++) {
+    var spark_count=min(_n,max(0,320-array_length(sparks)));
+    for (var k = 0; k < spark_count; k++) {
         var a = random(360), s = random_range(1, 6);
         array_push(sparks, {x:_x, y:_y, vx:lengthdir_x(s,a), vy:lengthdir_y(s,a), life:random_range(15,35), col:_col});
     }
@@ -253,8 +271,8 @@ ring = function(_x, _y, _count, _angle, _speed, _col) {
 spawn = function(_kind, _x, _y) {
     var enemy_health = (_kind >= 3) ? boss_health[_kind-3] : ((_kind == 2) ? 85 : 35);
     array_push(enemies, {x:_x, y:_y, home:_x, kind:_kind, hp:enemy_health, max_hp:enemy_health,
-        age:0, cd:60, r:(_kind>=3)?48:20, phase:0, transition:0, warning:0, gap:683, volley:0,
-        hit:0, display_hp:enemy_health});
+        row:180+(_x div 200 mod 3)*60, age:0, cd:60, r:(_kind>=3)?48:20, phase:0, transition:0, warning:0, gap:683, volley:0,
+        lock:270, hit:0, display_hp:enemy_health});
 };
 boss_tick = function(e) {
     e.y=lerp(e.y,190,0.035);
@@ -269,6 +287,12 @@ boss_tick = function(e) {
     if(e.transition>0) { e.transition--; return; }
     var aim=point_direction(e.x,e.y,px,py);
     if(e.kind==3 && e.cd<=0) {
+        // Every eighth volley opens a rotating pinwheel between spiral passages.
+        if(e.volley mod 8==7) {
+            for(var arm=0;arm<5;arm++) for(var petal=0;petal<3;petal++)
+                emit(e.x,e.y,arm*72+e.volley*9+petal*7,2.6+petal*0.45,5,gold);
+            e.cd=38; e.volley++; return;
+        }
         // Helix: paired counter-rotating spirals, petals, then both with aimed shots.
         if(e.phase!=1) {
             for(var k=0;k<3;k++) {
@@ -298,6 +322,9 @@ boss_tick = function(e) {
                     emit(bx,110,270,3.5+e.phase*0.6,6,gold);
                     if(e.phase==2) emit(bx,80,270,3.5+e.phase*0.6,6,pink);
                 }
+                // Offset diagonal sweep after every other curtain; corridor warns rain only.
+                if(e.phase>=1 && e.volley mod 2==1)
+                    for(var k=-3;k<=3;k++) emit(e.x,e.y,250+k*16,2.8,5,cyan);
                 e.cd=55; e.volley++;
             }
         } else if(e.cd<=0) {
@@ -308,6 +335,12 @@ boss_tick = function(e) {
         }
     }
     if(e.kind==5 && e.cd<=0) {
+        if(e.volley mod 10==9) {
+            // Two edge blooms leave the central route open as they expand.
+            ring(110,220,10,e.volley*7,2.5,pink);
+            ring(1256,220,10,-e.volley*7,2.5,gold);
+            e.cd=50; e.volley++; return;
+        }
         // Prism: rotating rings, aimed fans, then four sweeping spiral arms.
         if(e.phase==0) { ring(e.x,e.y,18,e.volley*11,3.2,pink); e.cd=25; }
         if(e.phase==1) {
@@ -320,6 +353,37 @@ boss_tick = function(e) {
             e.cd=8;
         }
         e.volley++;
+    }
+    if(e.kind==6) {
+        // Side shutters: lock a horizontal passage before both walls fire.
+        if(e.warning>0) {
+            e.warning--;
+            if(e.warning==0) {
+                for(var by=150;by<=720;by+=32) {
+                    if(abs(by-e.gap)<80) continue;
+                    emit(35,by,0,3.4+e.phase*0.4,6,pink);
+                    emit(1331,by,180,3.4+e.phase*0.4,6,violet);
+                }
+                if(e.phase>=1) ring(e.x,e.y,12,e.volley*19,2.2,gold);
+                e.volley++; e.cd=85-e.phase*10;
+            }
+        } else if(e.cd<=0) {
+            e.gap=clamp(py,250,620); e.warning=65;
+        }
+    }
+    if(e.kind==7) {
+        // Snapshot aim, visible charge, then a volley that never tracks after release.
+        if(e.warning>0) {
+            e.warning--;
+            if(e.warning==0) {
+                for(var k=-3-e.phase;k<=3+e.phase;k++) {
+                    emit(e.x,e.y,e.lock+k*12,3.5,6,gold);
+                    emit(e.x,e.y,e.lock+k*12,4.6,5,pink);
+                }
+                ring(e.x,e.y,14+e.phase*2,e.volley*13,2.1,cyan);
+                e.volley++; e.cd=65-e.phase*10;
+            }
+        } else if(e.cd<=0) { e.lock=aim; e.warning=55; }
     }
 };
 finish = function(_win) {
@@ -427,7 +491,7 @@ menu_draw = function() {
         label(810,650,"Scores save after victory or defeat.",1,muted);
     } else if(state=="shop") {
         label(100,140,"NEON SUPPLY",3,cyan);
-        label(100,212,"SECTOR "+string(wave div 3)+" CLEARED / UPGRADE DOCK",1.2,c_white);
+        label(100,212,"SECTOR "+string(wave div 4)+" CLEARED / UPGRADE DOCK",1.2,c_white);
         label(100,280,shop_message,1,gold);
         label(810,548,"CREDITS / "+string(credits),2,gold);
         label(810,595,"WEAPON "+string(weapon_level)+"/3   SHIELD "+string(shield)+"/2",1,cyan);
@@ -477,9 +541,8 @@ menu_draw = function() {
         label(100,310,state=="title"?"SURVIVE THE NEON STORM":(paused?"Take a breath. The storm can wait.":"FINAL SCORE  /  "+string(score)),1.3,state=="dead"?pink:muted);
         if(state=="title") {
             label(100,345,"PILOT / "+player_name,1,violet);
-            label(810,580,"01 / HELIX WARDEN",1,violet);
-            label(810,610,"02 / ION TEMPEST",1,gold);
-            label(810,640,"03 / PRISM ENGINE",1,cyan);
+            label(810,550,"FIVE SECTORS / TWENTY STAGES",1,cyan);
+            for(var k=0;k<5;k++) label(810,580+k*20,string(k+1)+" / "+boss_names[k],0.9,boss_colors[k]);
         }
         if(state=="dead" || state=="win") label(100,345,"PILOT / "+player_name+"  /  SCORE SAVED",1,gold);
     }
@@ -555,7 +618,7 @@ if (consume_pulse && bombs > 0) {
         if(e.kind<3 || (e.age>=120 && e.transition==0)) e.hp -= 130;
     }
 }
-// Three sectors, each with two formations and its own boss.
+// Advance only after the formation is cleared or has retreated.
 if (array_length(enemies) == 0) {
     wave_gap--;
     if (wave_gap <= 0) {
@@ -567,10 +630,15 @@ if (array_length(enemies) == 0) {
             change_scene("shop",false,0); return;
         }
         wave++; wave_time = 0; wave_gap = 120;
-        if(wave>array_length(stages)) { score += hp*1000; finish(true); }
-        else if (stages[wave-1] == 0) {
-            var count = 3 + ceil(wave*2/3);
-            for (var i = 0; i < count; i++) spawn((i+wave)%3,160+i*(1046/max(1,count-1)),-40-i%2*65);
+        if(wave>array_length(stages)) { score += hp*1000; finish(true); return; }
+        else if (stages[wave-1] <= 0) {
+            formation=-stages[wave-1];
+            var sector=(wave-1) div 4;
+            var count=5+sector;
+            for(var i=0;i<count;i++) {
+                spawn((i+formation+sector)%3,160+i*(1046/max(1,count-1)),-40-i%2*65);
+                enemies[i].row=formation==2?180+abs(i-(count-1)/2)*38:180+(i mod 2)*85;
+            }
         } else { bullets=[]; shots=[]; spawn(stages[wave-1],683,-80); }
     }
 }
@@ -581,17 +649,24 @@ for (var i = array_length(enemies)-1; i >= 0; i--) {
     if (e.kind >= 3) {
         boss_tick(e);
     } else {
-        e.y = lerp(e.y,180+(i%3)*60,0.025);
-        e.x = e.home+sin(e.age*0.025+e.home)*65;
+        if(e.age>1500) {
+            e.y-=8;
+            if(e.y < -60) { array_delete(enemies,i,1); continue; }
+            continue;
+        }
+        e.y=lerp(e.y,e.row,0.025);
+        if(formation==0) e.x=e.home+sin(e.age*0.025+e.home)*65;
+        if(formation==1) e.x=e.home+sin(e.age*0.018)*(i mod 2==0?115:-115);
+        if(formation==2) { e.x=e.home+sin(e.age*0.02)*45; e.y+=sin(e.age*0.025+i)*1.2; }
         if (e.cd <= 0 && e.age > 70) {
             var aim = point_direction(e.x,e.y,px,py);
-            if(e.kind==0) { for(var k=-1;k<=1;k++) emit(e.x,e.y,aim+k*16,3.5+wave*0.12,5,pink); }
-            if(e.kind==1) ring(e.x,e.y,10,e.age*1.5,2.3+wave*0.1,violet);
+            if(e.kind==0) { for(var k=-1;k<=1;k++) emit(e.x,e.y,aim+k*16,3.5+((wave-1) div 4)*0.2,5,pink); }
+            if(e.kind==1) ring(e.x,e.y,10,e.age*1.5,2.3+((wave-1) div 4)*0.15,violet);
             if(e.kind==2) { for(var k=-2;k<=2;k++) emit(e.x,e.y,270+k*22+sin(e.age*0.03)*30,3,6,gold); }
-            e.cd = max(45,100-wave*6);
+            if(formation==1 && e.kind==0) emit(e.x,e.y,270,2.8,6,cyan);
+            if(formation==2 && e.kind==2) ring(e.x,e.y,8,e.age,2.4,pink);
+            e.cd=max(55,100-((wave-1) div 4)*9)+(i mod 3)*7;
         }
-        // Formations retreat so a wave cannot stall forever.
-        if(e.age>1500) { e.y-=8; if(e.y < -60) { array_delete(enemies,i,1); continue; } }
     }
     if (e.hp <= 0) {
         score += e.kind>=3 ? 8000+(e.kind-3)*2000 : 150+e.kind*100;
@@ -599,7 +674,7 @@ for (var i = array_length(enemies)-1; i >= 0; i--) {
         burst(e.x,e.y,e.kind>=3?boss_colors[e.kind-3]:pink,e.kind>=3?100:28); shake = 6;
         if(e.kind>=3) {
             bullets=[]; hp=min(5,hp+1); bombs=min(3,bombs+1); inv=120;
-            if(e.kind<5) { drop_pickup(e.x-35,e.y,0); drop_pickup(e.x+35,e.y,1); shop_pending=true; }
+            if(wave<array_length(stages)) { drop_pickup(e.x-35,e.y,0); drop_pickup(e.x+35,e.y,1); shop_pending=true; }
         } else {
             kills++;
             // Every third kill guarantees a drop, plus occasional bonus supplies.
@@ -617,12 +692,12 @@ for (var i = array_length(shots)-1; i >= 0; i--) {
     var hit = false;
     for(var j=0;j<array_length(enemies);j++) {
         var e=enemies[j];
-        if(point_distance(s.x,s.y,e.x,e.y)<e.r+6) {
+        if(sqr(s.x-e.x)+sqr(s.y-e.y)<sqr(e.r+6)) {
             if(e.kind<3 || (e.age>=120 && e.transition==0)) { e.hp-=5; e.hit=6; }
             hit=true; burst(s.x,s.y,cyan,2); break;
         }
     }
-    if(hit || s.y < -20) array_delete(shots,i,1);
+    if(hit || s.y < -20 || s.x < -30 || s.x>1396) { shots[i]=shots[array_length(shots)-1]; array_pop(shots); }
 }
 // Collect before collision checks so a shield or repair helps immediately.
 for(var i=array_length(pickups)-1;i>=0;i--) {
@@ -637,24 +712,24 @@ for(var i=array_length(pickups)-1;i>=0;i--) {
 }
 for (var i = array_length(bullets)-1; i >= 0; i--) {
     var b=bullets[i]; b.x+=b.vx; b.y+=b.vy;
-    var dist=point_distance(px,py,b.x,b.y);
-    if(inv==0 && dash==0 && dist<b.r+4) {
+    var dist_squared=sqr(px-b.x)+sqr(py-b.y);
+    if(inv==0 && dash==0 && dist_squared<sqr(b.r+4)) {
         if(shield>0) {
             shield--; inv=75; shake=7; flash=0.25; burst(px,py,violet,35);
             pickup_notice="SHIELD ABSORBED HIT"; pickup_notice_time=90;
         } else {
             hp--; inv=110; shake=15; flash=0.5; burst(px,py,cyan,40);
         }
-        array_delete(bullets,i,1);
+        { bullets[i]=bullets[array_length(bullets)-1]; array_pop(bullets); }
         if(hp<=0) { finish(false); break; }
         continue;
     }
-    if(dist<24 && dist>b.r+4 && inv==0 && dash==0) score++;
-    if(b.x < -40 || b.x>1406 || b.y < -50 || b.y>810) array_delete(bullets,i,1);
+    if(dist_squared<576 && dist_squared>sqr(b.r+4) && inv==0 && dash==0) score++;
+    if(b.x < -40 || b.x>1406 || b.y < -50 || b.y>810) { bullets[i]=bullets[array_length(bullets)-1]; array_pop(bullets); }
 }
 for(var i=array_length(sparks)-1;i>=0;i--) {
     var p=sparks[i]; p.x+=p.vx; p.y+=p.vy; p.vx*=0.96; p.vy*=0.96; p.life--;
-    if(p.life<=0) array_delete(sparks,i,1);
+    if(p.life<=0) { sparks[i]=sparks[array_length(sparks)-1]; array_pop(sparks); }
 }
 
 };
